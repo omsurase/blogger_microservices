@@ -31,4 +31,15 @@ type TokenResponse struct {
 type ValidationResponse struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
+}
+
+type ErrorResponse struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
+}
+
+type SuccessResponse struct {
+	Status int         `json:"status"`
+	Data   interface{} `json:"data"`
 } 
