@@ -11,6 +11,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o auth-service .
 
 FROM alpine:latest
 
+# Add ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
 WORKDIR /app
 
 COPY --from=builder /app/auth-service .
