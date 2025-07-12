@@ -13,17 +13,20 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o service-registry
+RUN CGO_ENABLED=0 GOOS=linux go build -o service-registry-service .
 
 FROM alpine:latest
+
+# Add ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/service-registry .
+COPY --from=builder /app/service-registry-service .
 
 # Expose the application port
 EXPOSE 8080
 
 # Run the application
-CMD ["./service-registry"] 
+CMD ["./service-registry-service"] 
