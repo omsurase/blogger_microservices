@@ -64,7 +64,7 @@ func authMiddleware() gin.HandlerFunc {
 func registerService(serviceID string, port string) error {
 	registration := ServiceRegistration{
 		Name:    "post-service",
-		Address: "http://post-service:8080",
+		Address: fmt.Sprintf("http://post:%s", port),
 	}
 
 	jsonData, err := json.Marshal(registration)
@@ -121,7 +121,7 @@ func main() {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
 
-	redisStore, err := store.NewRedisStore(os.Getenv("REDIS_URL"), 1*time.Hour)
+	redisStore, err := store.NewRedisStore(os.Getenv("REDIS_ADDR"), 1*time.Hour)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
