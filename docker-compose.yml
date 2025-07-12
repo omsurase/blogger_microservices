@@ -1,96 +1,132 @@
+version: '3.8'
+
 services:
-  redis:
-    image: redis:alpine
+  postgres:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-blogger}
     ports:
-      - "6379:6379"
+      - "${HOST_POSTGRES_PORT:-5432}:5432"
     volumes:
-      - redis_data:/data
-    networks:
-      - service_network
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    ports:
+      - "${HOST_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "${HOST_RABBITMQ_PORT:-5672}:5672"
+      - "${HOST_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   service-registry:
     build:
       context: ./server/service-registry
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${HOST_SERVICE_REGISTRY_PORT:-8080}:${SERVICE_REGISTRY_PORT:-8080}"
     environment:
-      - REDIS_ADDR=redis:6379
-      - PORT=8080
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - PORT=${SERVICE_REGISTRY_PORT:-8080}
     depends_on:
-      - redis
-    networks:
-      - service_network
+      redis:
+        condition: service_healthy
 
-  postgres:
-    image: postgres:13-alpine
-    environment:
-      - POSTGRES_USER=blogger
-      - POSTGRES_PASSWORD=blogger_password
-      - POSTGRES_DB=blogger_auth
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - service_network
-
-  auth-service:
+  auth:
     build:
       context: ./server/auth
       dockerfile: Dockerfile
     ports:
-      - "8081:8080"
+      - "${HOST_AUTH_SERVICE_PORT:-8081}:${AUTH_SERVICE_PORT:-8080}"
     environment:
-      - DATABASE_URL=postgres://blogger:blogger_password@postgres:5432/blogger_auth?sslmode=disable
-      - JWT_SECRET_KEY=your_jwt_secret_key_here
-      - REGISTRY_URL=http://service-registry:8080
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
+      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
+      - PORT=${AUTH_SERVICE_PORT:-8080}
     depends_on:
-      - postgres
-      - service-registry
-    networks:
-      - service_network
+      postgres:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
 
-  user-profile-service:
+  user-profile:
     build:
       context: ./server/user-profile
       dockerfile: Dockerfile
     ports:
-      - "8082:8080"
+      - "${HOST_USER_PROFILE_PORT:-8082}:${USER_PROFILE_PORT:-8080}"
     environment:
-      - DATABASE_URL=postgres://blogger:blogger_password@postgres:5432/blogger_auth?sslmode=disable
-      - JWT_SECRET_KEY=your_jwt_secret_key_here
-      - REGISTRY_URL=http://service-registry:8080
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
+      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
+      - PORT=${USER_PROFILE_PORT:-8080}
     depends_on:
-      - postgres
-      - service-registry
-      - auth-service
-    networks:
-      - service_network
+      postgres:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
 
-  post-service:
+  post:
     build:
       context: ./server/post
       dockerfile: Dockerfile
     ports:
-      - "8083:8080"
+      - "${HOST_POST_SERVICE_PORT:-8083}:${POST_SERVICE_PORT:-8080}"
     environment:
-      - DATABASE_URL=postgres://blogger:blogger_password@postgres:5432/blogger_auth?sslmode=disable
-      - REDIS_URL=redis:6379
-      - JWT_SECRET_KEY=your_jwt_secret_key_here
-      - REGISTRY_URL=http://service-registry:8080
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
+      - PORT=${POST_SERVICE_PORT:-8080}
     depends_on:
-      - postgres
-      - redis
-      - service-registry
-      - auth-service
-    networks:
-      - service_network
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
 
-networks:
-  service_network:
-    driver: bridge
+  comment:
+    build:
+      context: ./server/comment
+      dockerfile: Dockerfile
+    ports:
+      - "${HOST_COMMENT_SERVICE_PORT:-8084}:${COMMENT_SERVICE_PORT:-8080}"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
+      - PORT=${COMMENT_SERVICE_PORT:-8080}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      service-registry:
+        condition: service_started
 
 volumes:
-  redis_data:
   postgres_data: 
