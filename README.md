@@ -38,19 +38,19 @@ To stop all services:
 make down
 ```
 
-## Service Registry
+## Service Documentation
 
-The Service Registry is a critical component that maintains a list of all active services in the system. It provides:
+For more information about each service, refer to the following table:
 
-- Service registration
-- Health check/heartbeat mechanism
-- Service discovery
-
-### Endpoints
-
-- `POST /register`: Register a new service
-- `POST /heartbeat`: Update service TTL
-- `GET /services`: List all active services
+| Service Name         | Documentation Link                                      |
+|---------------------|--------------------------------------------------------|
+| API Gateway         | -                                                      |
+| Auth Service        | -                                                      |
+| User Profile Service| -                                                      |
+| Post Service        | -                                                      |
+| Comment Service     | -                                                      |
+| Notification Service| -                                                      |
+| Service Registry    | [Service Registry README](server/service-registry/README.md) |
 
 ## Project Structure
 
