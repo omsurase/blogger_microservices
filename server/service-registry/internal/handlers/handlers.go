@@ -8,6 +8,7 @@ import (
 	"github.com/blogging-platform/service-registry/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	"errors"
 )
 
 type Handler struct {
@@ -62,13 +63,19 @@ func (h *Handler) RegisterService(c *gin.Context) {
 
 	if err := h.store.RegisterService(c.Request.Context(), service); err != nil {
 		h.logger.WithError(err).Error("Failed to register service")
-		
-		switch err {
-		case store.ErrServiceExists:
-			sendError(c, http.StatusConflict, "A service with this name already exists", err)
-		default:
-			sendError(c, http.StatusInternalServerError, "Failed to register service", err)
+
+		// If the service already exists, refresh the TTL and treat it as a successful registration.
+		if errors.Is(err, store.ErrServiceExists) {
+			if ttlErr := h.store.UpdateTTL(c.Request.Context(), service.Name); ttlErr != nil {
+				h.logger.WithError(ttlErr).Error("Failed to refresh TTL for existing service")
+				sendError(c, http.StatusInternalServerError, "Failed to refresh TTL for existing service", ttlErr)
+				return
+			}
+			sendSuccess(c, http.StatusOK, map[string]string{"name": service.Name, "status": "already registered"})
+			return
 		}
+
+		sendError(c, http.StatusInternalServerError, "Failed to register service", err)
 		return
 	}
 

@@ -25,6 +25,11 @@ const (
 )
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL environment variable is required")
@@ -43,12 +48,18 @@ func main() {
 	authHandler := handlers.NewAuthHandler(store)
 	router := gin.Default()
 
+	// Add health check endpoint
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	router.POST("/signup", authHandler.SignUp)
 	router.POST("/login", authHandler.Login)
 	router.GET("/validate-token", handlers.AuthMiddleware(), authHandler.ValidateToken)
+	router.GET("/api/users/:id", authHandler.GetUserByID)
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    fmt.Sprintf(":%s", port),
 		Handler: router,
 	}
 
@@ -60,6 +71,7 @@ func main() {
 	}()
 
 	go func() {
+		log.Printf("Auth service starting on port %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
@@ -100,7 +112,7 @@ func registerService() error {
 		resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(jsonPayload))
 		if err == nil {
 			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
+			if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
 				log.Printf("Successfully registered service with registry")
 				return nil
 			}

@@ -100,6 +100,33 @@ func (s *PostgresStore) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
+func (s *PostgresStore) GetUserByID(userID string) (*models.User, error) {
+	user := &models.User{}
+	query := `
+		SELECT id, email, password_hash, created_at, updated_at
+		FROM users
+		WHERE id = $1
+	`
+
+	err := s.db.QueryRow(query, userID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
 func (s *PostgresStore) Close() error {
 	return s.db.Close()
 } 

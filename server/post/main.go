@@ -2,25 +2,29 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/omsurase/blogger_microservices/server/post/internal/handlers"
 	"github.com/omsurase/blogger_microservices/server/post/internal/store"
 )
 
-type ServiceRegistration struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-}
+const (
+	serviceName    = "post-service"
+	retryAttempts  = 5
+	retryDelay     = 5 * time.Second
+	heartbeatDelay = 30 * time.Second
+)
 
 func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -61,53 +65,67 @@ func authMiddleware() gin.HandlerFunc {
 	}
 }
 
-func registerService(serviceID string, port string) error {
-	registration := ServiceRegistration{
-		Name:    "post-service",
-		Address: fmt.Sprintf("http://post:%s", port),
-	}
-
-	jsonData, err := json.Marshal(registration)
-	if err != nil {
-		return err
-	}
-
+func registerService() error {
 	registryURL := os.Getenv("REGISTRY_URL")
 	if registryURL == "" {
-		registryURL = "http://service-registry:8080"
+		return fmt.Errorf("REGISTRY_URL environment variable is required")
 	}
 
-	resp, err := http.Post(fmt.Sprintf("%s/register", registryURL), "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	serviceAddress := fmt.Sprintf("http://%s:8080", serviceName)
+	registerURL := fmt.Sprintf("%s/register", registryURL)
 
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("failed to register service: %d", resp.StatusCode)
-	}
+	for i := 0; i < retryAttempts; i++ {
+		payload := map[string]string{
+			"name":    serviceName,
+			"address": serviceAddress,
+		}
 
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		for range ticker.C {
-			heartbeat := ServiceRegistration{
-				Name: "post-service",
+		jsonPayload, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal registration payload: %v", err)
+		}
+
+		resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(jsonPayload))
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+				log.Printf("Successfully registered service with registry")
+				return nil
 			}
-			jsonData, err := json.Marshal(heartbeat)
+		}
+
+		log.Printf("Failed to register service, attempt %d/%d: %v", i+1, retryAttempts, err)
+		time.Sleep(retryDelay)
+	}
+
+	return fmt.Errorf("failed to register service after %d attempts", retryAttempts)
+}
+
+func startHeartbeat() {
+	registryURL := os.Getenv("REGISTRY_URL")
+	heartbeatURL := fmt.Sprintf("%s/heartbeat", registryURL)
+
+	ticker := time.NewTicker(heartbeatDelay)
+	go func() {
+		for range ticker.C {
+			payload := map[string]string{
+				"name": serviceName,
+			}
+
+			jsonPayload, err := json.Marshal(payload)
 			if err != nil {
-				log.Printf("Error marshaling heartbeat: %v", err)
+				log.Printf("Failed to marshal heartbeat payload: %v", err)
 				continue
 			}
-			resp, err := http.Post(fmt.Sprintf("%s/heartbeat", registryURL), "application/json", bytes.NewBuffer(jsonData))
+
+			resp, err := http.Post(heartbeatURL, "application/json", bytes.NewBuffer(jsonPayload))
 			if err != nil {
-				log.Printf("Error sending heartbeat: %v", err)
+				log.Printf("Failed to send heartbeat: %v", err)
 				continue
 			}
 			resp.Body.Close()
 		}
 	}()
-
-	return nil
 }
 
 func main() {
@@ -127,12 +145,6 @@ func main() {
 	}
 
 	handler := handlers.NewHandler(pgStore, redisStore)
-
-	serviceID := uuid.New().String()
-	if err := registerService(serviceID, port); err != nil {
-		log.Printf("Failed to register service: %v", err)
-	}
-
 	router := gin.Default()
 
 	router.POST("/post/create", authMiddleware(), handler.CreatePost)
@@ -142,8 +154,33 @@ func main() {
 	router.GET("/post/user/:id", handler.GetPostsByUser)
 	router.GET("/post/tag/:tag", handler.GetPostsByTag)
 
-	log.Printf("Post service starting on port %s", port)
-	if err := router.Run(fmt.Sprintf(":%s", port)); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: router,
+	}
+
+	go func() {
+		if err := registerService(); err != nil {
+			log.Printf("Failed to register service: %v", err)
+		}
+		startHeartbeat()
+	}()
+
+	go func() {
+		log.Printf("Post service starting on port %s", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 } 

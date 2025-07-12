@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-blogger}
-    ports:
-      - "${HOST_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,9 +16,11 @@ services:
       retries: 5
 
   redis:
-    image: redis:latest
+    image: redis/redis-stack:latest
     ports:
-      - "${HOST_REDIS_PORT:-6379}:6379"
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,13 +28,10 @@ services:
       retries: 5
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3-management-alpine
     ports:
-      - "${HOST_RABBITMQ_PORT:-5672}:5672"
-      - "${HOST_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 5s
@@ -46,87 +43,129 @@ services:
       context: ./server/service-registry
       dockerfile: Dockerfile
     ports:
-      - "${HOST_SERVICE_REGISTRY_PORT:-8080}:${SERVICE_REGISTRY_PORT:-8080}"
+      - "8081:8080"
     environment:
-      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
-      - PORT=${SERVICE_REGISTRY_PORT:-8080}
+      - REDIS_ADDR=redis:6379
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/services"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  auth:
+  auth-service:
     build:
       context: ./server/auth
       dockerfile: Dockerfile
-    ports:
-      - "${HOST_AUTH_SERVICE_PORT:-8081}:${AUTH_SERVICE_PORT:-8080}"
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
-      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
-      - PORT=${AUTH_SERVICE_PORT:-8080}
+      - REGISTRY_URL=http://service-registry:8080
+      - PORT=8080
     depends_on:
       postgres:
         condition: service_healthy
       service-registry:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   user-profile:
     build:
       context: ./server/user-profile
       dockerfile: Dockerfile
-    ports:
-      - "${HOST_USER_PROFILE_PORT:-8082}:${USER_PROFILE_PORT:-8080}"
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
-      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
-      - PORT=${USER_PROFILE_PORT:-8080}
+      - REGISTRY_URL=http://service-registry:8080
     depends_on:
       postgres:
         condition: service_healthy
       service-registry:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/profile/test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   post:
     build:
       context: ./server/post
       dockerfile: Dockerfile
-    ports:
-      - "${HOST_POST_SERVICE_PORT:-8083}:${POST_SERVICE_PORT:-8080}"
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
-      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
-      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable
+      - REDIS_ADDR=redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
-      - PORT=${POST_SERVICE_PORT:-8080}
+      - REGISTRY_URL=http://service-registry:8080
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       service-registry:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/post/test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   comment:
     build:
       context: ./server/comment
       dockerfile: Dockerfile
-    ports:
-      - "${HOST_COMMENT_SERVICE_PORT:-8084}:${COMMENT_SERVICE_PORT:-8080}"
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable}
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/blogger?sslmode=disable
       - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
-      - REGISTRY_URL=${REGISTRY_URL:-http://service-registry:8080}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
-      - PORT=${COMMENT_SERVICE_PORT:-8080}
+      - REGISTRY_URL=http://service-registry:8080
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       service-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/comment/post/test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    # Expose the comment service outside the Compose network so you can
+    # call it directly from your host (e.g., curl http://localhost:8084).
+    ports:
+      - "8084:8080"
+
+  notification:
+    build:
+      context: ./server/notification
+      dockerfile: Dockerfile
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      auth-service:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "ps", "aux", "|", "grep", "notification-service", "|", "grep", "-v", "grep"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  postgres_data: 
+  postgres_data:
+  redis_data: 

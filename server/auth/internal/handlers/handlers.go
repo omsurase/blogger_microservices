@@ -146,6 +146,27 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	})
 }
 
+func (h *AuthHandler) GetUserByID(c *gin.Context) {
+	userID := c.Param("id")
+	if userID == "" {
+		sendError(c, http.StatusBadRequest, "User ID is required", nil)
+		return
+	}
+
+	user, err := h.store.GetUserByID(userID)
+	if err != nil {
+		sendError(c, http.StatusInternalServerError, "Failed to fetch user", err)
+		return
+	}
+
+	if user == nil {
+		sendError(c, http.StatusNotFound, "User not found", nil)
+		return
+	}
+
+	sendSuccess(c, http.StatusOK, user)
+}
+
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")

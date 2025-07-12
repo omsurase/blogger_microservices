@@ -99,7 +99,7 @@ func registerService() error {
 		resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(jsonPayload))
 		if err == nil {
 			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
+			if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
 				log.Printf("Successfully registered service with registry")
 				return nil
 			}

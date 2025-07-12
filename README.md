@@ -49,7 +49,7 @@ For more information about each service, refer to the following table:
 | User Profile Service| [User Profile Service README](server/user-profile/README.md) |
 | Post Service        | [Post Service README](server/post/README.md)           |
 | Comment Service     | [Comment Service README](server/comment/README.md)     |
-| Notification Service| -                                                      |
+| Notification Service| [Notification Service README](server/notification/README.md) |
 | Service Registry    | [Service Registry README](server/service-registry/README.md) |
 
 ## Project Structure
