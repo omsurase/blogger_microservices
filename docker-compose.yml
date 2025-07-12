@@ -68,6 +68,25 @@ services:
     networks:
       - service_network
 
+  post-service:
+    build:
+      context: ./server/post
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8080"
+    environment:
+      - DATABASE_URL=postgres://blogger:blogger_password@postgres:5432/blogger_auth?sslmode=disable
+      - REDIS_URL=redis:6379
+      - JWT_SECRET_KEY=your_jwt_secret_key_here
+      - REGISTRY_URL=http://service-registry:8080
+    depends_on:
+      - postgres
+      - redis
+      - service-registry
+      - auth-service
+    networks:
+      - service_network
+
 networks:
   service_network:
     driver: bridge
