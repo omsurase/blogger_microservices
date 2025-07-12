@@ -46,11 +46,13 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	log.Printf("Initializing RabbitMQ publisher with URL: %s", rabbitmqURL)
 	publisher, err := publisher.NewRabbitMQPublisher(rabbitmqURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 	defer publisher.Close()
+	log.Printf("Successfully initialized RabbitMQ publisher")
 
 	commentHandler := handlers.NewCommentHandler(store, publisher)
 	router := gin.Default()
@@ -112,7 +114,7 @@ func registerService() error {
 		resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(jsonPayload))
 		if err == nil {
 			resp.Body.Close()
-			if resp.StatusCode == http.StatusCreated {
+			if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
 				log.Printf("Successfully registered service with registry")
 				return nil
 			}
