@@ -47,7 +47,7 @@ For more information about each service, refer to the following table:
 | API Gateway         | -                                                      |
 | Auth Service        | [Auth Service README](server/auth/README.md)           |
 | User Profile Service| [User Profile Service README](server/user-profile/README.md) |
-| Post Service        | -                                                      |
+| Post Service        | [Post Service README](server/post/README.md)           |
 | Comment Service     | -                                                      |
 | Notification Service| -                                                      |
 | Service Registry    | [Service Registry README](server/service-registry/README.md) |
