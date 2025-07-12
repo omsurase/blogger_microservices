@@ -4,32 +4,78 @@ Handles user authentication, registration, and JWT token management for the blog
 
 ## Endpoints
 
-- **POST /signup**: Register a new user
-- **POST /login**: Authenticate user and return JWT
-- **GET /validate-token**: Validate JWT and return user info (protected)
+### 1. Register a User
+- **URL:** `/signup`
+- **Method:** `POST`
+- **Request Body:**
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+  ```
+- **Success Response:**
+  - **Code:** 200
+  - **Body:**
+    ```json
+    {
+      "message": "User registered successfully"
+    }
+    ```
+
+### 2. Login
+- **URL:** `/login`
+- **Method:** `POST`
+- **Request Body:**
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+  ```
+- **Success Response:**
+  - **Code:** 200
+  - **Body:**
+    ```json
+    {
+      "token": "<jwt_token>"
+    }
+    ```
+
+### 3. Validate Token
+- **URL:** `/validate-token`
+- **Method:** `GET`
+- **Headers:**
+  - `Authorization: Bearer <token>`
+- **Success Response:**
+  - **Code:** 200
+  - **Body:**
+    ```json
+    {
+      "id": "<user_id>",
+      "email": "user@example.com"
+    }
+    ```
+
+## Usage
+
+- Register a user after startup using `/signup`.
+- Login via `/login` to receive a JWT.
+- Access protected endpoints by including the JWT in the `Authorization` header as `Bearer <token>`.
+
+## Environment Variables
+- `DATABASE_URL`: PostgreSQL connection string
+- `JWT_SECRET_KEY`: Secret key for signing JWTs
+- `REGISTRY_URL`: URL of the service registry
 
 ## Technology Stack
-
 - Go (Golang)
 - Gin Web Framework
 - PostgreSQL
 - golang-jwt/jwt
 - bcrypt
 
-## Environment Variables
-
-- `DATABASE_URL`: PostgreSQL connection string
-- `JWT_SECRET_KEY`: Secret key for signing JWTs
-- `REGISTRY_URL`: URL of the service registry
-
-## Usage
-
-- Register a user via `/signup` with email and password
-- Login via `/login` to receive a JWT
-- Access protected endpoints by including the JWT in the `Authorization` header as `Bearer <token>`
-
 ## Database Schema
-
 - **users** table:
   - `id` (UUID, primary key)
   - `email` (unique)
@@ -37,34 +83,7 @@ Handles user authentication, registration, and JWT token management for the blog
   - `created_at` (timestamp)
   - `updated_at` (timestamp)
 
-## Example Requests
-
-### Register
-```json
-POST /signup
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-```
-
-### Login
-```json
-POST /login
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
-```
-
-### Validate Token
-```
-GET /validate-token
-Authorization: Bearer <token>
-```
-
 ---
-
 - The service registers itself with the Service Registry and sends periodic heartbeats for service discovery.
 - Passwords are securely hashed using bcrypt.
 - JWTs include user ID and email as claims. 
