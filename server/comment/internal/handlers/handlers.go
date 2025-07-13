@@ -8,11 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/omsurase/blogger_microservices/server/comment/internal/models"
 	"github.com/omsurase/blogger_microservices/server/comment/internal/publisher"
@@ -226,39 +224,14 @@ func (h *CommentHandler) DeleteComment(c *gin.Context) {
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			sendError(c, http.StatusUnauthorized, "Authorization header is required", nil)
+		userID := c.GetHeader("X-User-ID")
+		if userID == "" {
+			sendError(c, http.StatusUnauthorized, "X-User-ID header missing", nil)
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			sendError(c, http.StatusUnauthorized, "Invalid token format. Use 'Bearer <token>'", nil)
-			c.Abort()
-			return
-		}
-
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET_KEY")), nil
-		})
-
-		if err != nil || !token.Valid {
-			sendError(c, http.StatusUnauthorized, "Invalid or expired token", err)
-			c.Abort()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			sendError(c, http.StatusInternalServerError, "Failed to parse token claims", nil)
-			c.Abort()
-			return
-		}
-
-		c.Set("user_id", claims["user_id"])
-		c.Set("email", claims["email"])
+		c.Set("user_id", userID)
 		c.Next()
 	}
 } 

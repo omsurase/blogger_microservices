@@ -103,6 +103,12 @@ func (s *RedisStore) GetServices(ctx context.Context) ([]*models.Service, error)
 	return services, nil
 }
 
+func (s *RedisStore) Ping() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return s.client.Ping(ctx).Err()
+}
+
 func (s *RedisStore) Close() error {
 	return s.client.Close()
 } 

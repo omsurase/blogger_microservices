@@ -57,9 +57,19 @@ func main() {
 	commentHandler := handlers.NewCommentHandler(store, publisher)
 	router := gin.Default()
 
-	router.POST("/comment/create", handlers.AuthMiddleware(), commentHandler.CreateComment)
-	router.GET("/comment/post/:postId", commentHandler.GetCommentsByPost)
-	router.DELETE("/comment/:id", handlers.AuthMiddleware(), commentHandler.DeleteComment)
+	// Group all routes under /comment prefix
+	commentGroup := router.Group("/comment")
+	{
+		commentGroup.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":    "ok",
+				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+			})
+		})
+		commentGroup.POST("/create", handlers.AuthMiddleware(), commentHandler.CreateComment)
+		commentGroup.GET("/post/:postId", commentHandler.GetCommentsByPost)
+		commentGroup.DELETE("/:id", handlers.AuthMiddleware(), commentHandler.DeleteComment)
+	}
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -97,7 +107,12 @@ func registerService() error {
 		return fmt.Errorf("REGISTRY_URL environment variable is required")
 	}
 
-	serviceAddress := fmt.Sprintf("http://%s:8080", serviceName)
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %v", err)
+	}
+
+	serviceAddress := fmt.Sprintf("http://%s:8080", hostname)
 	registerURL := fmt.Sprintf("%s/register", registryURL)
 
 	for i := 0; i < retryAttempts; i++ {

@@ -287,4 +287,38 @@ func (h *Handler) GetPostsByTag(c *gin.Context) {
 
 	c.Header("Cache-Control", "public, max-age=60")
 	sendSuccess(c, http.StatusOK, response)
+}
+
+func (h *Handler) GetAllPosts(c *gin.Context) {
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		sendError(c, http.StatusBadRequest, "Invalid page number", err)
+		return
+	}
+
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		sendError(c, http.StatusBadRequest, "Invalid page size (must be between 1 and 100)", err)
+		return
+	}
+
+	posts, totalCount, err := h.pgStore.GetAllPosts(page, pageSize)
+	if err != nil {
+		sendError(c, http.StatusInternalServerError, "Failed to fetch posts", err)
+		return
+	}
+
+	response := models.PaginatedPostsResponse{
+		Posts:      make([]models.PostResponse, len(posts)),
+		TotalCount: totalCount,
+		Page:       page,
+		PageSize:   pageSize,
+	}
+
+	for i, post := range posts {
+		response.Posts[i] = models.PostResponse(post)
+	}
+
+	c.Header("Cache-Control", "public, max-age=60")
+	sendSuccess(c, http.StatusOK, response)
 } 

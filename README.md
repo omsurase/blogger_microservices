@@ -38,6 +38,27 @@ To stop all services:
 make down
 ```
 
+## API Gateway Endpoints
+
+| Endpoint                   | Description                                      |
+|---------------------------|--------------------------------------------------|
+| `/health`                 | Returns the health status of the API Gateway.    |
+| `/health/detailed`        | Returns detailed health information about the gateway and registered services. |
+| `/api/v1/auth/login`      | User login endpoint.                             |
+| `/api/v1/auth/signup`     | User signup/registration endpoint.               |
+| `/api/v1/auth/register`   | Alternate user registration endpoint.            |
+| `/api/v1/auth/health`     | Health check for Auth Service.                   |
+| `/api/v1/auth/validate-token` | Validate an existing JWT token through Auth Service. |
+| `/api/v1/auth/logout`            | User sign-out endpoint (token invalidation).     |
+| `/api/v1/posts`           | Handles blog post creation, listing, etc.        |
+| `/api/v1/posts/*`         | Handles specific post operations (CRUD).         |
+| `/api/v1/posts/health`    | Health check for Post Service.                   |
+| `/api/v1/comments/*`      | Handles comment operations for posts.            |
+| `/api/v1/comments/health` | Health check for Comment Service.                |
+| `/api/v1/profile/*`       | Handles user profile operations.                 |
+| `/api/v1/profile/health`  | Health check for User Profile Service.           |
+| `/service-registry/health`| Health check for Service Registry.               |
+
 ## Service Documentation
 
 For more information about each service, refer to the following table:
@@ -70,3 +91,5 @@ blogging-platform/
 ├── Makefile
 └── README.md
 ```
+
+**Note:** Each service exposes a `/health` endpoint for health checks, accessible via the API Gateway as shown above.

@@ -31,6 +31,7 @@ func main() {
 	router.POST("/register", handler.RegisterService)
 	router.POST("/heartbeat", handler.Heartbeat)
 	router.GET("/services", handler.GetServices)
+	router.GET("/health", handler.Health)
 
 	port := os.Getenv("PORT")
 	if port == "" {

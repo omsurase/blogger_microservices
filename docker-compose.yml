@@ -17,8 +17,6 @@ services:
 
   redis:
     image: redis/redis-stack:latest
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -42,8 +40,6 @@ services:
     build:
       context: ./server/service-registry
       dockerfile: Dockerfile
-    ports:
-      - "8081:8080"
     environment:
       - REDIS_ADDR=redis:6379
     depends_on:
@@ -64,6 +60,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
       - REGISTRY_URL=http://service-registry:8080
       - PORT=8080
+      - REDIS_ADDR=redis:6379
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,7 +91,7 @@ services:
       timeout: 5s
       retries: 5
 
-  post:
+  post-service:
     build:
       context: ./server/post
       dockerfile: Dockerfile
@@ -111,7 +108,7 @@ services:
       service-registry:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/post/test"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -138,10 +135,28 @@ services:
       timeout: 5s
       retries: 5
 
-    # Expose the comment service outside the Compose network so you can
-    # call it directly from your host (e.g., curl http://localhost:8084).
+  api-gateway:
+    build:
+      context: ./server/api-gateway
+      dockerfile: Dockerfile
     ports:
-      - "8084:8080"
+      - "8080:8080"
+    environment:
+      - SERVICE_REGISTRY_URL=http://service-registry:8080
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key}
+      - ENVIRONMENT=development
+      - VERSION=1.0.0
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   notification:
     build:

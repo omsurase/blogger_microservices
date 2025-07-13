@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/omsurase/blogger_microservices/server/auth/internal/handlers"
 	"github.com/omsurase/blogger_microservices/server/auth/internal/store"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -45,18 +46,37 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	authHandler := handlers.NewAuthHandler(store)
-	router := gin.Default()
+	// Initialize Redis client
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "redis:6379"
+	}
 
-	// Add health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
 	})
 
-	router.POST("/signup", authHandler.SignUp)
-	router.POST("/login", authHandler.Login)
-	router.GET("/validate-token", handlers.AuthMiddleware(), authHandler.ValidateToken)
-	router.GET("/api/users/:id", authHandler.GetUserByID)
+	// simple ping to confirm connectivity (non-fatal if fails, but log)
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		log.Printf("Warning: failed to connect to Redis at %s: %v", redisAddr, err)
+	}
+
+	authHandler := handlers.NewAuthHandler(store, redisClient)
+	router := gin.Default()
+
+	// Add health check endpoint under auth prefix
+	router.GET("/auth/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "ok",
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		})
+	})
+
+	router.POST("/auth/signup", authHandler.SignUp)
+	router.POST("/auth/login", authHandler.Login)
+	router.GET("/auth/validate-token", handlers.AuthMiddleware(), authHandler.ValidateToken)
+	router.POST("/auth/logout", handlers.AuthMiddleware(), authHandler.Logout)
+	router.GET("/auth/users/:id", authHandler.GetUserByID)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),
@@ -95,7 +115,12 @@ func registerService() error {
 		return fmt.Errorf("REGISTRY_URL environment variable is required")
 	}
 
-	serviceAddress := fmt.Sprintf("http://%s:8080", serviceName)
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %v", err)
+	}
+
+	serviceAddress := fmt.Sprintf("http://%s:8080", hostname)
 	registerURL := fmt.Sprintf("%s/register", registryURL)
 
 	for i := 0; i < retryAttempts; i++ {

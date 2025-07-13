@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strings"
@@ -8,17 +9,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/omsurase/blogger_microservices/server/auth/internal/models"
 	"github.com/omsurase/blogger_microservices/server/auth/internal/store"
 	"golang.org/x/crypto/bcrypt"
+	"github.com/redis/go-redis/v9"
 )
 
 type AuthHandler struct {
 	store *store.PostgresStore
+	redis *redis.Client
 }
 
-func NewAuthHandler(store *store.PostgresStore) *AuthHandler {
-	return &AuthHandler{store: store}
+func NewAuthHandler(store *store.PostgresStore, redisClient *redis.Client) *AuthHandler {
+	return &AuthHandler{store: store, redis: redisClient}
 }
 
 func sendError(c *gin.Context, status int, message string, err error) {
@@ -97,10 +101,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	iat := time.Now().Unix()
+	jti := uuid.NewString()
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID.String(),
 		"email":   user.Email,
 		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+		"iat":     iat,
+		"jti":     jti,
 	})
 
 	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET_KEY")))
@@ -165,6 +174,65 @@ func (h *AuthHandler) GetUserByID(c *gin.Context) {
 	}
 
 	sendSuccess(c, http.StatusOK, user)
+}
+
+// Logout invalidates the provided JWT by blacklisting its jti in Redis.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		sendError(c, http.StatusUnauthorized, "Authorization header is required", nil)
+		return
+	}
+
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		sendError(c, http.StatusUnauthorized, "Invalid token format. Use 'Bearer <token>'", nil)
+		return
+	}
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET_KEY")), nil
+	})
+
+	if err != nil || !token.Valid {
+		sendError(c, http.StatusUnauthorized, "Invalid or expired token", err)
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		sendError(c, http.StatusInternalServerError, "Failed to parse token claims", nil)
+		return
+	}
+
+	jtiClaim, ok := claims["jti"].(string)
+	if !ok || jtiClaim == "" {
+		sendError(c, http.StatusBadRequest, "Token missing jti claim", nil)
+		return
+	}
+
+	expClaim, ok := claims["exp"].(float64)
+	if !ok {
+		sendError(c, http.StatusBadRequest, "Token missing exp claim", nil)
+		return
+	}
+
+	// Calculate TTL as remaining seconds until expiration.
+	ttlSeconds := int64(expClaim) - time.Now().Unix()
+	if ttlSeconds <= 0 {
+		// Token already expired, nothing to blacklist.
+		sendSuccess(c, http.StatusOK, gin.H{"message": "Token already expired"})
+		return
+	}
+
+	ctx := context.Background()
+	err = h.redis.Set(ctx, jtiClaim, "blacklisted", time.Duration(ttlSeconds)*time.Second).Err()
+	if err != nil {
+		sendError(c, http.StatusInternalServerError, "Failed to blacklist token", err)
+		return
+	}
+
+	sendSuccess(c, http.StatusOK, gin.H{"message": "Successfully logged out"})
 }
 
 func AuthMiddleware() gin.HandlerFunc {
