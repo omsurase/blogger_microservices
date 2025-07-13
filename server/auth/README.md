@@ -57,6 +57,20 @@ Handles user authentication, registration, and JWT token management for the blog
     }
     ```
 
+### 4. Logout (Sign-Out)
+- **URL:** `/logout`
+- **Method:** `POST`
+- **Headers:**
+  - `Authorization: Bearer <token>`
+- **Success Response:**
+  - **Code:** 200
+  - **Body:**
+    ```json
+    {
+      "message": "Successfully logged out"
+    }
+    ```
+
 ## Usage
 
 - Register a user after startup using `/signup`.

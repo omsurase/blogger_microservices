@@ -48,6 +48,8 @@ make down
 | `/api/v1/auth/signup`     | User signup/registration endpoint.               |
 | `/api/v1/auth/register`   | Alternate user registration endpoint.            |
 | `/api/v1/auth/health`     | Health check for Auth Service.                   |
+| `/api/v1/auth/validate-token` | Validate an existing JWT token through Auth Service. |
+| `/api/v1/auth/logout`            | User sign-out endpoint (token invalidation).     |
 | `/api/v1/posts`           | Handles blog post creation, listing, etc.        |
 | `/api/v1/posts/*`         | Handles specific post operations (CRUD).         |
 | `/api/v1/posts/health`    | Health check for Post Service.                   |

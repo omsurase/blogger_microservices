@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/omsurase/blogger_microservices/server/auth/internal/handlers"
 	"github.com/omsurase/blogger_microservices/server/auth/internal/store"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -45,7 +46,22 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	authHandler := handlers.NewAuthHandler(store)
+	// Initialize Redis client
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "redis:6379"
+	}
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+
+	// simple ping to confirm connectivity (non-fatal if fails, but log)
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		log.Printf("Warning: failed to connect to Redis at %s: %v", redisAddr, err)
+	}
+
+	authHandler := handlers.NewAuthHandler(store, redisClient)
 	router := gin.Default()
 
 	// Add health check endpoint under auth prefix
@@ -59,6 +75,7 @@ func main() {
 	router.POST("/auth/signup", authHandler.SignUp)
 	router.POST("/auth/login", authHandler.Login)
 	router.GET("/auth/validate-token", handlers.AuthMiddleware(), authHandler.ValidateToken)
+	router.POST("/auth/logout", handlers.AuthMiddleware(), authHandler.Logout)
 	router.GET("/auth/users/:id", authHandler.GetUserByID)
 
 	srv := &http.Server{

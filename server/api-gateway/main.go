@@ -17,6 +17,7 @@ import (
     "github.com/golang-jwt/jwt/v5"
     "github.com/sirupsen/logrus"
     "golang.org/x/time/rate"
+    "github.com/redis/go-redis/v9"
 )
 
 // ----------------------------------
@@ -256,7 +257,7 @@ func makeProxyHandler(mapping routeMapping, disc *Discovery, logger *logrus.Logg
 // Global JWT middleware (validate all requests except login/signup)
 // ----------------------------------
 
-func jwtAuthMiddleware(secret []byte) gin.HandlerFunc {
+func jwtAuthMiddleware(secret []byte, redisClient *redis.Client) gin.HandlerFunc {
     return func(c *gin.Context) {
         path := c.Request.URL.Path
 
@@ -290,6 +291,23 @@ func jwtAuthMiddleware(secret []byte) gin.HandlerFunc {
             c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
             c.Abort()
             return
+        }
+
+        // Blacklist check using Redis (jti)
+        if jti, ok := claims["jti"]; ok {
+            jtiStr := fmt.Sprintf("%v", jti)
+            ctx := context.Background()
+            if _, err := redisClient.Get(ctx, jtiStr).Result(); err == nil {
+                // jti found in blacklist
+                c.JSON(http.StatusUnauthorized, gin.H{"error": "Token has been revoked"})
+                c.Abort()
+                return
+            } else if err != nil && err != redis.Nil {
+                // Redis error
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+                c.Abort()
+                return
+            }
         }
 
         // Propagate user info to downstream services via headers
@@ -380,8 +398,16 @@ func main() {
     router := gin.New()
     router.Use(gin.Recovery())
 
+    // Initialize Redis client for blacklist checks
+    redisAddr := os.Getenv("REDIS_ADDR")
+    if redisAddr == "" {
+        redisAddr = "redis:6379"
+    }
+
+    redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+
     // Global authentication middleware
-    router.Use(jwtAuthMiddleware(jwtSecret))
+    router.Use(jwtAuthMiddleware(jwtSecret, redisClient))
 
     // Logging middleware
     router.Use(func(c *gin.Context) {
