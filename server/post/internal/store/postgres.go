@@ -220,4 +220,47 @@ func (s *PostgresStore) GetPostsByTag(tag string, page, pageSize int) ([]models.
 	}
 
 	return posts, totalCount, rows.Err()
+}
+
+func (s *PostgresStore) GetAllPosts(page, pageSize int) ([]models.Post, int, error) {
+	offset := (page - 1) * pageSize
+
+	countQuery := `SELECT COUNT(*) FROM posts`
+	var totalCount int
+	err := s.db.QueryRow(countQuery).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT id, user_id, title, content, tags, created_at, updated_at
+		FROM posts
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2`
+
+	rows, err := s.db.Query(query, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var posts []models.Post
+	for rows.Next() {
+		var post models.Post
+		err := rows.Scan(
+			&post.ID,
+			&post.UserID,
+			&post.Title,
+			&post.Content,
+			pq.Array(&post.Tags),
+			&post.CreatedAt,
+			&post.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		posts = append(posts, post)
+	}
+
+	return posts, totalCount, rows.Err()
 } 

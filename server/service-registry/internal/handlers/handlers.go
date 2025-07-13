@@ -120,3 +120,17 @@ func (h *Handler) Heartbeat(c *gin.Context) {
 
 	sendSuccess(c, http.StatusOK, map[string]string{"name": req.Name})
 } 
+
+// Health returns the health status of the service registry and Redis connection
+func (h *Handler) Health(c *gin.Context) {
+	err := h.store.Ping()
+	status := "ok"
+	if err != nil {
+		status = "unhealthy"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status": status,
+		"redis":  err == nil,
+		"error":  func() string { if err != nil { return err.Error() } else { return "" } }(),
+	})
+} 

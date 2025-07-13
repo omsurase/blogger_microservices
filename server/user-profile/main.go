@@ -43,6 +43,14 @@ func main() {
 	profileHandler := handlers.NewProfileHandler(store)
 	router := gin.Default()
 
+	// Health endpoint
+	router.GET("/profile/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "ok",
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		})
+	})
+
 	router.GET("/profile/:id", profileHandler.GetProfile)
 	router.PUT("/profile/update", handlers.AuthMiddleware(), profileHandler.UpdateProfile)
 
@@ -82,7 +90,12 @@ func registerService() error {
 		return fmt.Errorf("REGISTRY_URL environment variable is required")
 	}
 
-	serviceAddress := fmt.Sprintf("http://%s:8080", serviceName)
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %v", err)
+	}
+
+	serviceAddress := fmt.Sprintf("http://%s:8080", hostname)
 	registerURL := fmt.Sprintf("%s/register", registryURL)
 
 	for i := 0; i < retryAttempts; i++ {

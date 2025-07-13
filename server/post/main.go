@@ -9,12 +9,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/omsurase/blogger_microservices/server/post/internal/handlers"
 	"github.com/omsurase/blogger_microservices/server/post/internal/store"
 )
@@ -28,39 +26,14 @@ const (
 
 func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+		userID := c.GetHeader("X-User-ID")
+		if userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "X-User-ID header missing"})
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format. Use 'Bearer <token>'"})
-			c.Abort()
-			return
-		}
-
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET_KEY")), nil
-		})
-
-		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-			c.Abort()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse token claims"})
-			c.Abort()
-			return
-		}
-
-		c.Set("user_id", claims["user_id"])
-		c.Set("email", claims["email"])
+		c.Set("user_id", userID)
 		c.Next()
 	}
 }
@@ -71,7 +44,12 @@ func registerService() error {
 		return fmt.Errorf("REGISTRY_URL environment variable is required")
 	}
 
-	serviceAddress := fmt.Sprintf("http://%s:8080", serviceName)
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %v", err)
+	}
+
+	serviceAddress := fmt.Sprintf("http://%s:8080", hostname)
 	registerURL := fmt.Sprintf("%s/register", registryURL)
 
 	for i := 0; i < retryAttempts; i++ {
@@ -153,6 +131,15 @@ func main() {
 	router.GET("/post/:id", handler.GetPost)
 	router.GET("/post/user/:id", handler.GetPostsByUser)
 	router.GET("/post/tag/:tag", handler.GetPostsByTag)
+	router.GET("/post", handler.GetAllPosts)
+
+	// Health endpoint under /post prefix
+	router.GET("/post/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"timestamp": time.Now(),
+		})
+	})
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),

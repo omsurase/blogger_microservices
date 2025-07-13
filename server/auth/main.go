@@ -48,15 +48,18 @@ func main() {
 	authHandler := handlers.NewAuthHandler(store)
 	router := gin.Default()
 
-	// Add health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	// Add health check endpoint under auth prefix
+	router.GET("/auth/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "ok",
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		})
 	})
 
-	router.POST("/signup", authHandler.SignUp)
-	router.POST("/login", authHandler.Login)
-	router.GET("/validate-token", handlers.AuthMiddleware(), authHandler.ValidateToken)
-	router.GET("/api/users/:id", authHandler.GetUserByID)
+	router.POST("/auth/signup", authHandler.SignUp)
+	router.POST("/auth/login", authHandler.Login)
+	router.GET("/auth/validate-token", handlers.AuthMiddleware(), authHandler.ValidateToken)
+	router.GET("/auth/users/:id", authHandler.GetUserByID)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),
@@ -95,7 +98,12 @@ func registerService() error {
 		return fmt.Errorf("REGISTRY_URL environment variable is required")
 	}
 
-	serviceAddress := fmt.Sprintf("http://%s:8080", serviceName)
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("failed to get hostname: %v", err)
+	}
+
+	serviceAddress := fmt.Sprintf("http://%s:8080", hostname)
 	registerURL := fmt.Sprintf("%s/register", registryURL)
 
 	for i := 0; i < retryAttempts; i++ {
