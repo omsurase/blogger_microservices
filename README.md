@@ -24,7 +24,7 @@ A modern, scalable blogging platform built using microservices architecture.
 ### Prerequisites
 
 - Docker and Docker Compose
-- Go 1.21 or later
+- Go 1.24 or later
 
 ### Running the Project
 
