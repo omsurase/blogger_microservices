@@ -166,9 +166,9 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_USERNAME=omsurase2504@gmail.com
       - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - FROM_EMAIL=${FROM_EMAIL}
+      - FROM_EMAIL=omsurase2504@gmail.com
       - AUTH_SERVICE_URL=http://auth-service:8080
     depends_on:
       rabbitmq:

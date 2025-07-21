@@ -50,47 +50,40 @@ func sendSuccess(c *gin.Context, status int, data interface{}) {
 }
 
 func (h *CommentHandler) getPost(postID string) (*models.Post, error) {
-	postServiceURL := os.Getenv("POST_SERVICE_URL")
-	if postServiceURL == "" {
-		postServiceURL = "http://post:8080"
-	}
+    postServiceURL := os.Getenv("POST_SERVICE_URL")
+    if postServiceURL == "" {
+        postServiceURL = "http://post-service:8080"
+    }
 
-	postURL := fmt.Sprintf("%s/post/%s", postServiceURL, postID)
-	log.Printf("Fetching post details from: %s", postURL)
-	resp, err := http.Get(postURL)
-	if err != nil {
-		log.Printf("Failed to fetch post: %v", err)
-		// Try with localhost if internal DNS fails
-		postURL = fmt.Sprintf("http://localhost:8083/post/%s", postID)
-		log.Printf("Retrying with localhost: %s", postURL)
-		resp, err = http.Get(postURL)
-		if err != nil {
-			log.Printf("Failed to fetch post from localhost: %v", err)
-			return nil, fmt.Errorf("failed to fetch post: %v", err)
-		}
-	}
-	defer resp.Body.Close()
+    postURL := fmt.Sprintf("%s/post/%s", postServiceURL, postID)
+    log.Printf("Fetching post details from: %s", postURL)
+    resp, err := http.Get(postURL)
+    if err != nil {
+        log.Printf("Failed to fetch post: %v", err)
+        return nil, fmt.Errorf("failed to fetch post: %v", err)
+    }
+    defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Post service returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
-		return nil, fmt.Errorf("failed to fetch post: %s", string(body))
-	}
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        log.Printf("Post service returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+        return nil, fmt.Errorf("failed to fetch post: %s", string(body))
+    }
 
-	body, _ := io.ReadAll(resp.Body)
-	log.Printf("Post service response: %s", string(body))
+    body, _ := io.ReadAll(resp.Body)
+    log.Printf("Post service response: %s", string(body))
 
-	var response struct {
-		Status int         `json:"status"`
-		Data   models.Post `json:"data"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		log.Printf("Failed to decode post response: %v", err)
-		return nil, fmt.Errorf("failed to decode post response: %v", err)
-	}
+    var response struct {
+        Status int         `json:"status"`
+        Data   models.Post `json:"data"`
+    }
+    if err := json.Unmarshal(body, &response); err != nil {
+        log.Printf("Failed to decode post response: %v", err)
+        return nil, fmt.Errorf("failed to decode post response: %v", err)
+    }
 
-	log.Printf("Successfully fetched post details: %+v", response.Data)
-	return &response.Data, nil
+    log.Printf("Successfully fetched post details: %+v", response.Data)
+    return &response.Data, nil
 }
 
 func (h *CommentHandler) CreateComment(c *gin.Context) {

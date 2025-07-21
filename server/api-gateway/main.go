@@ -311,7 +311,7 @@ func jwtAuthMiddleware(secret []byte, redisClient *redis.Client) gin.HandlerFunc
         }
 
         // Propagate user info to downstream services via headers
-        if uid, ok := claims["id"]; ok {
+        if uid, ok := claims["user_id"]; ok {
             c.Request.Header.Set("X-User-ID", fmt.Sprintf("%v", uid))
             c.Set("user_id", uid)
         }

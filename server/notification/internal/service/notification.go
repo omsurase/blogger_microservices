@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -29,7 +30,7 @@ func NewNotificationService() *NotificationService {
 
 	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
 	if authServiceURL == "" {
-		authServiceURL = "http://auth:8080" // default URL for auth service in Docker
+		authServiceURL = "http://auth-service:8080" // default URL for auth service in Docker
 	}
 
 	return &NotificationService{
@@ -51,22 +52,40 @@ type UserResponse struct {
 }
 
 func (s *NotificationService) getUserEmail(userID string) (string, error) {
-	url := fmt.Sprintf("%s/api/users/%s", s.authServiceURL, userID)
+	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
+	if authServiceURL == "" {
+		authServiceURL = "http://auth-service:8080"
+	}
+
+	url := fmt.Sprintf("%s/auth/users/%s", authServiceURL, userID)
+	log.Printf("Fetching user details from: %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("failed to get user details: %v", err)
+		log.Printf("Failed to fetch user: %v", err)
+		return "", fmt.Errorf("failed to fetch user: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get user details: status code %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read response body: %v", err)
+		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Auth service returned non-200 status: %d, body: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("failed to fetch user: %s", string(body))
+	}
+
+	log.Printf("Auth service response: %s", string(body))
+
 	var userResp UserResponse
-	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
+	if err := json.Unmarshal(body, &userResp); err != nil {
+		log.Printf("Failed to decode user response: %v", err)
 		return "", fmt.Errorf("failed to decode user response: %v", err)
 	}
 
+	log.Printf("Successfully fetched user details: %+v", userResp.Data)
 	return userResp.Data.Email, nil
 }
 
